@@ -2,10 +2,10 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::request::FromRequest;
-use rocket::serde::{Serialize, Deserialize};
+use rocket::response::{self, Responder, Response};
+use rocket::serde::{Deserialize, Serialize};
 use rocket::{Request, State};
-use serde_json::Value;
+use serde_json::{from_value, Value};
 use std::fs::File;
 
 #[derive(Serialize, Deserialize)]
@@ -15,14 +15,10 @@ struct Recipes {
     instructions: Vec<String>,
 }
 
-impl FromRequest<'_> for str {
-    type Error = <type>;
-
-
-    fn from_request< 'life0, 'async_trait>(request: & 'r Request< 'life0>) ->  core::pin::Pin<Box<dyncore::future::Future<Output = rocket::request::Outcome<Self,Self::Error> > + core::marker::Send+ 'async_trait> >where 'r: 'async_trait, 'life0: 'async_trait,Self: 'async_trait {
-        todo!()
-    }
-
+#[derive(Serialize, Deserialize)]
+struct RecipeNames {
+    title: String,
+    names: Vec<String>,
 }
 
 #[get("/")]
@@ -38,12 +34,38 @@ fn all_recipes() -> String {
     return recipes.to_string();
 }
 
+impl<'r> Responder<'r, 'static> for RecipeNames {
+    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
+        Response::build().ok()
+    }
+}
+
 #[get("/recipes")]
-fn recipe_names(key: &str, json: &State<Value>) -> Option<String> {
-    if let Some(value) = json.get(key) {
-        Some(String::from(
-            value.as_str().expect("Failed to convert value"),
-        ))
+fn recipe_names(json: &State<Value>) -> Option<RecipeNames> {
+    let key = "name".to_string();
+    let mut recipeNames: Vec<String> = vec![];
+    if let Some(recipes) = json.get("recipes") {
+        println!("recipes {:#?}", recipes);
+        // while let Some(value) = recipes[0].get(&key) {
+        //     println!("value {}", value);
+        //     // Some(String::from(
+        //     //     value.as_str().expect("Failed to convert value"),
+        //     // ))
+        //     if !recipeNames.contains(&value.to_string()) {
+        //         recipeNames.push(value.to_string());
+        //     }
+        // }
+        for ele in from_value(*recipes) {
+            // if ele == "name".to_string() {
+            //     recipeNames.push(ele);
+            // }
+            println!("{:#?}", ele);
+        }
+        let result = RecipeNames {
+            title: "recipeNames".to_string(),
+            names: recipeNames,
+        };
+        Some(result)
     } else {
         None
     }
@@ -62,5 +84,5 @@ fn rocket() -> _ {
     rocket::build()
         .manage(json)
         .register("/", catchers![not_found])
-        .mount("/", routes![index, recipe_names])
+        .mount("/", routes![index, recipe_names, all_recipes])
 }
