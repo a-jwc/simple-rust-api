@@ -137,6 +137,11 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
     }
 }
 
+#[put("/recipes")]
+fn edit_recipe() {
+
+}
+
 #[launch]
 fn rocket() -> _ {
     let rdr = File::open("static/data.json").expect("Failed to open data.json");
@@ -152,7 +157,8 @@ fn rocket() -> _ {
                 recipe_names,
                 all_recipes,
                 get_recipe_details,
-                add_recipe
+                add_recipe,
+                edit_recipe
             ],
         )
 }
