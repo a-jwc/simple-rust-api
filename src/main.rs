@@ -3,22 +3,54 @@
 extern crate rocket;
 
 use rocket::response::{self, Responder, Response};
+use rocket::serde::json::{Json, Value};
 use rocket::serde::{Deserialize, Serialize};
 use rocket::{Request, State};
-use serde_json::{from_value, Value};
-use std::fs::File;
 
-#[derive(Serialize, Deserialize)]
+use std::fs::{self, File};
+use std::io::Write;
+
+#[catch(404)]
+fn not_found(req: &Request) -> String {
+    format!("could not find '{}'", req.uri())
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
 struct Recipes {
     name: String,
     ingredients: Vec<String>,
     instructions: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+impl std::fmt::Display for Recipes {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+
 struct RecipeNames {
-    title: String,
-    names: Vec<String>,
+    recipeNames: Vec<String>,
+}
+
+impl std::fmt::Display for RecipeNames {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.recipeNames)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Details {
+    ingredients: Vec<String>,
+    numSteps: u32,
+}
+
+impl<'r> Responder<'r, 'static> for Details {
+    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
+        Response::build().ok()
+    }
 }
 
 #[get("/")]
@@ -41,39 +73,68 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 }
 
 #[get("/recipes")]
-fn recipe_names(json: &State<Value>) -> Option<RecipeNames> {
-    let key = "name".to_string();
-    let mut recipeNames: Vec<String> = vec![];
-    if let Some(recipes) = json.get("recipes") {
-        println!("recipes {:#?}", recipes);
-        // while let Some(value) = recipes[0].get(&key) {
-        //     println!("value {}", value);
-        //     // Some(String::from(
-        //     //     value.as_str().expect("Failed to convert value"),
-        //     // ))
-        //     if !recipeNames.contains(&value.to_string()) {
-        //         recipeNames.push(value.to_string());
-        //     }
-        // }
-        for ele in from_value(*recipes) {
-            // if ele == "name".to_string() {
-            //     recipeNames.push(ele);
-            // }
-            println!("{:#?}", ele);
+fn recipe_names(json: &State<Value>) -> Option<Value> {
+    let mut all_recipe_names = Vec::new();
+    let recipes = json.get("recipes")?;
+    let recipe = recipes.to_string();
+    let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    for ele in data.iter() {
+        all_recipe_names.push(&ele.name);
+    }
+    let result: serde_json::Value = serde_json::json!( {
+        "recipeNames": all_recipe_names,
+    });
+    Some(result)
+}
+
+#[get("/recipes/details/<name>")]
+fn get_recipe_details(json: &State<Value>, name: &str) -> Option<Value> {
+    let mut result: serde_json::Value = serde_json::json!({});
+    let recipes = json.get("recipes")?;
+    let recipe = recipes.to_string();
+    let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap();
+    for ele in data.iter() {
+        if ele.name.to_string() == name {
+            let details: serde_json::Value = serde_json::json!({
+              "ingredients": ele.ingredients,
+              "numSteps": ele.instructions.len()
+            });
+            result = serde_json::json!({ "details": details });
+            break;
+        } else {
+            result = serde_json::json!({});
         }
-        let result = RecipeNames {
-            title: "recipeNames".to_string(),
-            names: recipeNames,
-        };
-        Some(result)
+    }
+    Some(result)
+}
+
+// TODO: preserve formatting
+#[post("/recipes", format = "json", data = "<item>")]
+fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .append(false)
+        .create(false)
+        .open("static/data.json")
+        .expect("unable to open");
+    let mut all_recipe_names = Vec::new();
+    let recipes = json.get("recipes")?;
+    let recipe = recipes.to_string();
+    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    for ele in all_recipes.iter() {
+        all_recipe_names.push(&ele.name);
+    }
+    if !all_recipe_names.contains(&&item.name) {
+        let new_recipe = item.into_inner();
+        all_recipes.push(new_recipe);
+        let result = serde_json::json!({ "recipes": all_recipes });
+        serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
+        file.flush().unwrap_or_default();
+        Some(())
     } else {
         None
     }
-}
-
-#[catch(404)]
-fn not_found(req: &Request) -> String {
-    format!("could not find '{}'", req.uri())
 }
 
 #[launch]
@@ -84,5 +145,14 @@ fn rocket() -> _ {
     rocket::build()
         .manage(json)
         .register("/", catchers![not_found])
-        .mount("/", routes![index, recipe_names, all_recipes])
+        .mount(
+            "/",
+            routes![
+                index,
+                recipe_names,
+                all_recipes,
+                get_recipe_details,
+                add_recipe
+            ],
+        )
 }
