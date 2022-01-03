@@ -111,7 +111,7 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, String> 
 // TODO: preserve formatting; 
 // TODO: if recipe exists, do not add
 #[post("/recipes", format = "json", data = "<item>")]
-fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
+fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
     let mut file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -120,7 +120,7 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes")?;
+    let recipes = json.get("recipes").expect("could not find recipes");
     let recipe = recipes.to_string();
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in all_recipes.iter() {
@@ -132,14 +132,14 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
         let result = serde_json::json!({ "recipes": all_recipes });
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
-        Some(())
+        Ok(())
     } else {
-        None
+        Err("Recipe already exists".to_string())
     }
 }
 
 #[put("/recipes", format = "json", data = "<item>")]
-fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
+fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
     let mut file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -148,22 +148,22 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes")?;
+    let recipes = json.get("recipes").expect("could not find recipes");
     let recipe = recipes.to_string();
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in all_recipes.iter() {
         all_recipe_names.push(&ele.name);
     }
-    if !all_recipe_names.contains(&&item.name) {
+    if all_recipe_names.contains(&&item.name) {
         all_recipes.retain(|x| x.name != item.name);
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
-        Some(())
+        Ok(())
     } else {
-        None
+      Err("Recipe does not exist".to_string())
     }
 }
 
