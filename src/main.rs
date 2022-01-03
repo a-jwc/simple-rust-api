@@ -73,9 +73,9 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 }
 
 #[get("/recipes")]
-fn recipe_names(json: &State<Value>) -> Option<Value> {
+fn recipe_names(json: &State<Value>) -> Result<Value, String> {
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes")?;
+    let recipes = json.get("recipes").expect("could not find recipes");
     let recipe = recipes.to_string();
     let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in data.iter() {
@@ -84,13 +84,13 @@ fn recipe_names(json: &State<Value>) -> Option<Value> {
     let result: serde_json::Value = serde_json::json!( {
         "recipeNames": all_recipe_names,
     });
-    Some(result)
+    Ok(result)
 }
 
 #[get("/recipes/details/<name>")]
-fn get_recipe_details(json: &State<Value>, name: &str) -> Option<Value> {
+fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, String> {
     let mut result: serde_json::Value = serde_json::json!({});
-    let recipes = json.get("recipes")?;
+    let recipes = json.get("recipes").expect("could not find recipes");
     let recipe = recipes.to_string();
     let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap();
     for ele in data.iter() {
@@ -105,10 +105,11 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Option<Value> {
             result = serde_json::json!({});
         }
     }
-    Some(result)
+    Ok(result)
 }
 
-// TODO: preserve formatting
+// TODO: preserve formatting; 
+// TODO: if recipe exists, do not add
 #[post("/recipes", format = "json", data = "<item>")]
 fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
     let mut file = fs::OpenOptions::new()
