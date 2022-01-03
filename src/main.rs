@@ -138,9 +138,33 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
     }
 }
 
-#[put("/recipes")]
-fn edit_recipe() {
-
+#[put("/recipes", format = "json", data = "<item>")]
+fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Option<()> {
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .append(false)
+        .create(false)
+        .open("static/data.json")
+        .expect("unable to open");
+    let mut all_recipe_names = Vec::new();
+    let recipes = json.get("recipes")?;
+    let recipe = recipes.to_string();
+    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    for ele in all_recipes.iter() {
+        all_recipe_names.push(&ele.name);
+    }
+    if !all_recipe_names.contains(&&item.name) {
+        all_recipes.retain(|x| x.name != item.name);
+        let new_recipe = item.into_inner();
+        all_recipes.push(new_recipe);
+        let result = serde_json::json!({ "recipes": all_recipes });
+        serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
+        file.flush().unwrap_or_default();
+        Some(())
+    } else {
+        None
+    }
 }
 
 #[launch]
