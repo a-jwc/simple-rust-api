@@ -1,4 +1,5 @@
 #![feature(proc_macro_hygiene, decl_macro)]
+
 #[macro_use]
 extern crate rocket;
 
@@ -55,7 +56,7 @@ impl<'r> Responder<'r, 'static> for Details {
 
 #[get("/")]
 fn index() -> &'static str {
-    "this is index"
+    "trunk-web-api"
 }
 
 #[get("/allRecipes")]
@@ -63,7 +64,7 @@ fn all_recipes() -> String {
     let rdr = File::open("static/data.json").expect("Failed to open data.json");
     let recipes: Value =
         serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
-    return recipes.to_string();
+    recipes.to_string()
 }
 
 impl<'r> Responder<'r, 'static> for RecipeNames {
@@ -75,7 +76,7 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 #[get("/recipes")]
 fn recipe_names(json: &State<Value>) -> Result<Value, String> {
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("could not find recipes");
+    let recipes = json.get("recipes").expect("Could not find recipes");
     let recipe = recipes.to_string();
     let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in data.iter() {
@@ -90,7 +91,7 @@ fn recipe_names(json: &State<Value>) -> Result<Value, String> {
 #[get("/recipes/details/<name>")]
 fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, String> {
     let mut result: serde_json::Value = serde_json::json!({});
-    let recipes = json.get("recipes").expect("could not find recipes");
+    let recipes = json.get("recipes").expect("Could not find recipes");
     let recipe = recipes.to_string();
     let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap();
     for ele in data.iter() {
@@ -108,7 +109,7 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, String> 
     Ok(result)
 }
 
-// TODO: preserve formatting; 
+// TODO: preserve formatting;
 // TODO: if recipe exists, do not add
 #[post("/recipes", format = "json", data = "<item>")]
 fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
@@ -120,7 +121,7 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("could not find recipes");
+    let recipes = json.get("recipes").expect("Could not find recipes");
     let recipe = recipes.to_string();
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in all_recipes.iter() {
@@ -148,7 +149,7 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("could not find recipes");
+    let recipes = json.get("recipes").expect("Could not find recipes");
     let recipe = recipes.to_string();
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
     for ele in all_recipes.iter() {
@@ -163,7 +164,7 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         file.flush().unwrap_or_default();
         Ok(())
     } else {
-      Err("Recipe does not exist".to_string())
+        Err("Recipe does not exist".to_string())
     }
 }
 
@@ -186,4 +187,84 @@ fn rocket() -> _ {
                 edit_recipe
             ],
         )
+}
+
+#[cfg(test)]
+mod test {
+    use std::{fs::File, io};
+
+    use super::rocket;
+    use rocket::http::{Header, Status};
+    use rocket::local::blocking::Client;
+    use serde_json::Value;
+    mod constants;
+
+    fn get_data_json() -> String {
+        let rdr = File::open("static/data.json").expect("Failed to open data.json");
+        let recipes: Value =
+            serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
+        recipes.to_string()
+    }
+
+    fn remove_whitespace(s: &str) -> String {
+        s.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
+    #[test]
+    fn get_index() {
+        let client = Client::tracked(rocket()).expect("valid rocket instance");
+        let mut response = client.get("/").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.into_string().unwrap(), "trunk-web-api");
+    }
+
+    #[test]
+    fn get_recipe_names_200_success() {
+        let client = Client::tracked(rocket()).expect("valid rocket instance");
+        let mut response = client.get("/recipes").dispatch();
+        let recipe_names = r#"{"recipeNames":["scrambledEggs","garlicPasta","chai","butteredBagel"]}"#;
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.into_string().unwrap(), recipe_names);
+    }
+
+    #[test]
+    fn get_recipe_details_200_success() {
+        let client = Client::tracked(rocket()).expect("valid rocket instance");
+        let mut response = client.get("/recipes/details/garlicPasta").dispatch();
+        let recipe_details = r#"{"details":{"ingredients":["500mL water","100g spaghetti","25mL olive oil","4 cloves garlic","Salt"],"numSteps":5}}"#;
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.into_string().unwrap(), recipe_details);
+    }
+
+    #[test]
+    fn get_recipe_details_200_no_recipe_found() {
+        let client = Client::tracked(rocket()).expect("valid rocket instance");
+        let mut response = client.get("/recipes/details/notARecipe").dispatch();
+        let recipe_details = r#"{}"#;
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.into_string().unwrap(), recipe_details);
+    }
+
+    #[test]
+    fn post_add_recipe_200_success() {
+        let file = get_data_json();
+        let client = Client::tracked(rocket()).expect("valid rocket instance");
+        let content_type = Header::new("Content-Type", "application/json");
+        let response = client
+            .post("/recipes")
+            .header(content_type)
+            .body(constants::BAGEL_RECIPE)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(remove_whitespace(&file), remove_whitespace(constants::ADD_BUTTERED_BAGEL));
+    }
+
+    // #[test]
+    // fn post_add_recipe_200_no_recipe_found() {
+    //     let client = Client::tracked(rocket()).expect("valid rocket instance");
+    //     let mut response = client.get("/recipes").dispatch();
+    //     let recipe_details = r#"{}"#;
+    //     assert_eq!(response.status(), Status::Ok);
+    //     assert_eq!(response.into_string().unwrap(), recipe_details);
+    // }
 }

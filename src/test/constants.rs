@@ -1,4 +1,4 @@
-{
+pub const ADD_BUTTERED_BAGEL: &str = r#"{
   "recipes": [
     {
       "ingredients": [
@@ -59,4 +59,16 @@
       "name": "butteredBagel"
     }
   ]
-}
+}"#;
+
+pub const BAGEL_RECIPE: &str = r#"{
+	"name": "butteredBagel", 
+		"ingredients": [
+			"1 bagel", 
+			"butter"
+		], 
+	"instructions": [
+		"cut the bagel", 
+		"spread butter on bagel"
+	] 
+}"#;
