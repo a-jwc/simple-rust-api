@@ -108,9 +108,9 @@ fn recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
 fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status, String)> {
     let mut result: serde_json::Value = serde_json::json!({});
     let recipes = match crate::get_recipes_json(json) {
-      Ok(r) => r,
-      Err(e) => return Err(e),
-  };
+        Ok(r) => r,
+        Err(e) => return Err(e),
+    };
     let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     for ele in data.iter() {
         if ele.name.to_string() == name {
@@ -128,9 +128,8 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status,
 }
 
 // TODO: preserve formatting;
-// TODO: if recipe exists, do not add
 #[post("/recipes", format = "json", data = "<item>")]
-fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
+fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
     let mut file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -139,9 +138,11 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("Could not find recipes");
-    let recipe = recipes.to_string();
-    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    let recipes = match crate::get_recipes_json(json) {
+        Ok(r) => r,
+        Err(e) => return Err(e),
+    };
+    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     for ele in all_recipes.iter() {
         all_recipe_names.push(&ele.name);
     }
@@ -153,12 +154,12 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         file.flush().unwrap_or_default();
         Ok(())
     } else {
-        Err("Recipe already exists".to_string())
+        Err((Status::BadRequest, "Recipe already exists".to_string()))
     }
 }
 
 #[put("/recipes", format = "json", data = "<item>")]
-fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
+fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
     let mut file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -167,9 +168,11 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         .open("static/data.json")
         .expect("unable to open");
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("Could not find recipes");
-    let recipe = recipes.to_string();
-    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    let recipes = match crate::get_recipes_json(json) {
+        Ok(r) => r,
+        Err(e) => return Err(e),
+    };
+    let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     for ele in all_recipes.iter() {
         all_recipe_names.push(&ele.name);
     }
@@ -182,7 +185,7 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), String> {
         file.flush().unwrap_or_default();
         Ok(())
     } else {
-        Err("Recipe does not exist".to_string())
+        Err((Status::BadRequest, "Recipe does not exist".to_string()))
     }
 }
 
