@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate rocket;
 
+use rocket::http::Status;
 use rocket::response::{self, Responder, Response};
 use rocket::serde::json::{Json, Value};
 use rocket::serde::{Deserialize, Serialize};
@@ -54,6 +55,19 @@ impl<'r> Responder<'r, 'static> for Details {
     }
 }
 
+fn get_recipes_json(json: &State<Value>) -> Result<String, (Status, String)> {
+    let recipes = match json.get("recipes") {
+        Some(r) => r.to_string(),
+        None => {
+            return Err((
+                Status::BadGateway,
+                "Could not find get top-level \"recipes\" property.".to_string(),
+            ))
+        }
+    };
+    Ok(recipes)
+}
+
 #[get("/")]
 fn index() -> &'static str {
     "trunk-web-api"
@@ -74,11 +88,13 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 }
 
 #[get("/recipes")]
-fn recipe_names(json: &State<Value>) -> Result<Value, String> {
+fn recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
     let mut all_recipe_names = Vec::new();
-    let recipes = json.get("recipes").expect("Could not find recipes");
-    let recipe = recipes.to_string();
-    let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap_or_default();
+    let recipes = match crate::get_recipes_json(json) {
+        Ok(r) => r,
+        Err(e) => return Err(e),
+    };
+    let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     for ele in data.iter() {
         all_recipe_names.push(&ele.name);
     }
@@ -89,11 +105,13 @@ fn recipe_names(json: &State<Value>) -> Result<Value, String> {
 }
 
 #[get("/recipes/details/<name>")]
-fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, String> {
+fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status, String)> {
     let mut result: serde_json::Value = serde_json::json!({});
-    let recipes = json.get("recipes").expect("Could not find recipes");
-    let recipe = recipes.to_string();
-    let data: Vec<Recipes> = serde_json::from_str(&recipe).unwrap();
+    let recipes = match crate::get_recipes_json(json) {
+      Ok(r) => r,
+      Err(e) => return Err(e),
+  };
+    let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     for ele in data.iter() {
         if ele.name.to_string() == name {
             let details: serde_json::Value = serde_json::json!({
@@ -222,7 +240,8 @@ mod test {
     fn get_recipe_names_200_success() {
         let client = Client::tracked(rocket()).expect("valid rocket instance");
         let mut response = client.get("/recipes").dispatch();
-        let recipe_names = r#"{"recipeNames":["scrambledEggs","garlicPasta","chai","butteredBagel"]}"#;
+        let recipe_names =
+            r#"{"recipeNames":["scrambledEggs","garlicPasta","chai","butteredBagel"]}"#;
         assert_eq!(response.status(), Status::Ok);
         assert_eq!(response.into_string().unwrap(), recipe_names);
     }
@@ -256,7 +275,10 @@ mod test {
             .body(constants::BAGEL_RECIPE)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
-        assert_eq!(remove_whitespace(&file), remove_whitespace(constants::ADD_BUTTERED_BAGEL));
+        assert_eq!(
+            remove_whitespace(&file),
+            remove_whitespace(constants::ADD_BUTTERED_BAGEL)
+        );
     }
 
     // #[test]
