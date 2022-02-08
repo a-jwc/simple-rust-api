@@ -50,11 +50,11 @@
     {
       "ingredients": [
         "1 bagel",
-        "butter"
+        "cream cheese"
       ],
       "instructions": [
         "cut the bagel",
-        "spread butter on bagel"
+        "spread cream cheese on bagel"
       ],
       "name": "butteredBagel"
     }
