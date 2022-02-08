@@ -93,11 +93,8 @@ fn index() -> &'static str {
 }
 
 #[get("/allRecipes")]
-fn all_recipes() -> String {
-    let rdr = File::open("static/data.json").expect("Failed to open data.json");
-    let recipes: Value =
-        serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
-    recipes.to_string()
+fn all_recipes(json: &State<Value>) -> String {
+    json.to_string()
 }
 
 impl<'r> Responder<'r, 'static> for RecipeNames {
@@ -145,7 +142,7 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status,
 
 #[post("/recipes", format = "json", data = "<item>")]
 fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = crate::read_file("static/data.json".to_string());
+    let mut file = crate::read_file("data/data.json".to_string());
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -166,7 +163,7 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, S
 
 #[put("/recipes", format = "json", data = "<item>")]
 fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = crate::read_file("static/data.json".to_string());
+    let mut file = crate::read_file("data/data.json".to_string());
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -188,7 +185,7 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, 
 
 #[launch]
 fn rocket() -> _ {
-    let rdr = File::open("static/data.json").expect("Failed to open data.json");
+    let rdr = File::open("data/data.json").expect("Failed to open data.json");
     let json: Value =
         serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
     rocket::build()
@@ -218,7 +215,7 @@ mod test {
     mod constants;
 
     fn get_data_json() -> String {
-        let rdr = File::open("static/data.json").expect("Failed to open data.json");
+        let rdr = File::open("data/data.json").expect("Failed to open data.json");
         let recipes: Value =
             serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
         recipes.to_string()
