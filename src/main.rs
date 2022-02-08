@@ -68,6 +68,25 @@ fn get_recipes_json(json: &State<Value>) -> Result<String, (Status, String)> {
     Ok(recipes)
 }
 
+fn read_file(file_path: String) -> File {
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .append(false)
+        .create(false)
+        .open(file_path)
+        .expect("unable to open");
+    file
+}
+
+fn add_to_vec(data: Vec<Recipes>) -> Vec<String> {
+    let mut all_recipe_names: Vec<String> = Vec::new();
+    for ele in data.iter() {
+        all_recipe_names.push(ele.name.to_owned());
+    }
+    all_recipe_names
+}
+
 #[get("/")]
 fn index() -> &'static str {
     "trunk-web-api"
@@ -89,15 +108,12 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 
 #[get("/recipes")]
 fn recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
-    let mut all_recipe_names = Vec::new();
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
     let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
-    for ele in data.iter() {
-        all_recipe_names.push(&ele.name);
-    }
+    let all_recipe_names = crate::add_to_vec(data);
     let result: serde_json::Value = serde_json::json!( {
         "recipeNames": all_recipe_names,
     });
@@ -127,25 +143,15 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status,
     Ok(result)
 }
 
-// TODO: preserve formatting;
 #[post("/recipes", format = "json", data = "<item>")]
 fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .append(false)
-        .create(false)
-        .open("static/data.json")
-        .expect("unable to open");
-    let mut all_recipe_names = Vec::new();
+    let mut file = crate::read_file("static/data.json".to_string());
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
-    for ele in all_recipes.iter() {
-        all_recipe_names.push(&ele.name);
-    }
+    let all_recipe_names = crate::add_to_vec(serde_json::from_str(&recipes).unwrap_or_default());
     if !all_recipe_names.contains(&&item.name) {
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
@@ -160,22 +166,13 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, S
 
 #[put("/recipes", format = "json", data = "<item>")]
 fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .append(false)
-        .create(false)
-        .open("static/data.json")
-        .expect("unable to open");
-    let mut all_recipe_names = Vec::new();
+    let mut file = crate::read_file("static/data.json".to_string());
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
-    for ele in all_recipes.iter() {
-        all_recipe_names.push(&ele.name);
-    }
+    let all_recipe_names = crate::add_to_vec(serde_json::from_str(&recipes).unwrap_or_default());
     if all_recipe_names.contains(&&item.name) {
         all_recipes.retain(|x| x.name != item.name);
         let new_recipe = item.into_inner();
