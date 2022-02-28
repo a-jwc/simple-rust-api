@@ -69,7 +69,7 @@ fn get_recipes_json(json: &State<Value>) -> Result<String, (Status, String)> {
 }
 
 fn read_file(file_path: String) -> File {
-    let mut file = fs::OpenOptions::new()
+    let file = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .append(false)
@@ -104,7 +104,7 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 }
 
 #[get("/recipes")]
-fn recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
+fn get_recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -119,7 +119,6 @@ fn recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
 
 #[get("/recipes/details/<name>")]
 fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status, String)> {
-    let mut result: serde_json::Value = serde_json::json!({});
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -131,13 +130,13 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status,
               "ingredients": ele.ingredients,
               "numSteps": ele.instructions.len()
             });
-            result = serde_json::json!({ "details": details });
-            break;
+            let result = serde_json::json!({ "details": details });
+            return Ok(result);
         } else {
-            result = serde_json::json!({});
+            {}
         }
     }
-    Ok(result)
+    Err((Status::BadRequest, "Name not found".to_string()))
 }
 
 #[post("/recipes", format = "json", data = "<item>")]
@@ -195,7 +194,7 @@ fn rocket() -> _ {
             "/",
             routes![
                 index,
-                recipe_names,
+                get_recipe_names,
                 all_recipes,
                 get_recipe_details,
                 add_recipe,
