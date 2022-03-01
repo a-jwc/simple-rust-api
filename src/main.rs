@@ -4,7 +4,6 @@
 extern crate rocket;
 
 use rocket::http::Status;
-use rocket::response::{self, Responder, Response};
 use rocket::serde::json::{Json, Value};
 use rocket::serde::{Deserialize, Serialize};
 use rocket::{Request, State};
@@ -26,36 +25,6 @@ struct Recipes {
     instructions: Vec<String>,
 }
 
-impl std::fmt::Display for Recipes {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-
-struct RecipeNames {
-    recipeNames: Vec<String>,
-}
-
-impl std::fmt::Display for RecipeNames {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self.recipeNames)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Details {
-    ingredients: Vec<String>,
-    numSteps: u32,
-}
-
-impl<'r> Responder<'r, 'static> for Details {
-    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
-        Response::build().ok()
-    }
-}
-
 struct JsonState {
     json: Value,
 }
@@ -64,7 +33,6 @@ type JsonStatePointer = RwLock<Value>;
 
 impl JsonState {
     fn new(json: Value) -> JsonStatePointer {
-        // let new_state = JsonState { json };
         RwLock::new(json)
     }
 }
@@ -111,12 +79,6 @@ fn index() -> &'static str {
 fn all_recipes(json: &State<JsonStatePointer>) -> String {
     let json = json.read().unwrap();
     json.to_string()
-}
-
-impl<'r> Responder<'r, 'static> for RecipeNames {
-    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
-        Response::build().ok()
-    }
 }
 
 #[get("/recipes")]
@@ -208,7 +170,7 @@ fn edit_recipe(
 
 #[launch]
 fn rocket() -> _ {
-    let rdr = File::open("data/data.json").expect("Failed to open data.json");
+    let rdr = crate::read_file("data/data.json".to_string());
     let json: Value =
         serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
     rocket::build()
