@@ -11,6 +11,7 @@ use rocket::{Request, State};
 
 use std::fs::{self, File};
 use std::io::Write;
+use std::sync::RwLock;
 
 #[catch(404)]
 fn not_found(req: &Request) -> String {
@@ -55,7 +56,21 @@ impl<'r> Responder<'r, 'static> for Details {
     }
 }
 
-fn get_recipes_json(json: &State<Value>) -> Result<String, (Status, String)> {
+struct JsonState {
+    json: Value,
+}
+
+type JsonStatePointer = RwLock<Value>;
+
+impl JsonState {
+    fn new(json: Value) -> JsonStatePointer {
+        // let new_state = JsonState { json };
+        RwLock::new(json)
+    }
+}
+
+fn get_recipes_json(json: &State<JsonStatePointer>) -> Result<String, (Status, String)> {
+    let json = json.read().unwrap();
     let recipes = match json.get("recipes") {
         Some(r) => r.to_string(),
         None => {
@@ -93,7 +108,8 @@ fn index() -> &'static str {
 }
 
 #[get("/allRecipes")]
-fn all_recipes(json: &State<Value>) -> String {
+fn all_recipes(json: &State<JsonStatePointer>) -> String {
+    let json = json.read().unwrap();
     json.to_string()
 }
 
@@ -104,7 +120,7 @@ impl<'r> Responder<'r, 'static> for RecipeNames {
 }
 
 #[get("/recipes")]
-fn get_recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
+fn get_recipe_names(json: &State<JsonStatePointer>) -> Result<Value, (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -118,7 +134,10 @@ fn get_recipe_names(json: &State<Value>) -> Result<Value, (Status, String)> {
 }
 
 #[get("/recipes/details/<name>")]
-fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status, String)> {
+fn get_recipe_details(
+    json: &State<JsonStatePointer>,
+    name: &str,
+) -> Result<Value, (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -140,8 +159,7 @@ fn get_recipe_details(json: &State<Value>, name: &str) -> Result<Value, (Status,
 }
 
 #[post("/recipes", format = "json", data = "<item>")]
-fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = crate::read_file("data/data.json".to_string());
+fn add_recipe(json: &State<JsonStatePointer>, item: Json<Recipes>) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -152,6 +170,8 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, S
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
+        *json.write().unwrap() = result.clone();
+        let mut file = crate::read_file("data/data.json".to_string());
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
         Ok(())
@@ -161,8 +181,10 @@ fn add_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, S
 }
 
 #[put("/recipes", format = "json", data = "<item>")]
-fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, String)> {
-    let mut file = crate::read_file("data/data.json".to_string());
+fn edit_recipe(
+    json: &State<JsonStatePointer>,
+    item: Json<Recipes>,
+) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -174,6 +196,8 @@ fn edit_recipe(json: &State<Value>, item: Json<Recipes>) -> Result<(), (Status, 
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
+        *json.write().unwrap() = result.clone();
+        let mut file = crate::read_file("data/data.json".to_string());
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
         Ok(())
@@ -188,7 +212,7 @@ fn rocket() -> _ {
     let json: Value =
         serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
     rocket::build()
-        .manage(json)
+        .manage(JsonState::new(json))
         .register("/", catchers![not_found])
         .mount(
             "/",
