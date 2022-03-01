@@ -83,60 +83,87 @@ fn all_recipes(json: &State<MutJsonState>) -> String {
 
 #[get("/recipes")]
 fn get_recipe_names(json: &State<MutJsonState>) -> Result<Value, (Status, String)> {
+    // Call get_recipes_json to convert our JSON `Value` into a `String`, otherwise returns an `Error`
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
+
+    // Deserialize the `String` into a vector of `Recipes`
     let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
+
+    // Call add_to_vec to convert the Vec<Recipes> into a form to construct a JSON `Value`
     let all_recipe_names = crate::add_to_vec(data);
+
+    // Create a JSON `Value` with a key of "recipeNames" and a value of `Vec<String>`
     let result: serde_json::Value = serde_json::json!( {
         "recipeNames": all_recipe_names,
     });
+
+    // Return the successful result
     Ok(result)
 }
 
 #[get("/recipes/details/<name>")]
-fn get_recipe_details(
-    json: &State<MutJsonState>,
-    name: &str,
-) -> Result<Value, (Status, String)> {
+fn get_recipe_details(json: &State<MutJsonState>, name: &str) -> Result<Value, (Status, String)> {
+    // Call get_recipes_json to convert our JSON `Value` into a `String`, otherwise returns an `Error`
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
+
+    // Deserialize the `String` into a vector of `Recipes`
     let data: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
+
+    // Loop through the `Vec<Recipes>`, using an if-else to check for a name match
     for ele in data.iter() {
         if ele.name.to_string() == name {
+            // If we get a hit, construct the JSON `Value`. We will call `.len()` on the instructions to get the number of steps needed for the recipe
             let details: serde_json::Value = serde_json::json!({
               "ingredients": ele.ingredients,
               "numSteps": ele.instructions.len()
             });
+            // Store this in our `result` with the key `details` as specified in our problem statement, then return the successful result
             let result = serde_json::json!({ "details": details });
             return Ok(result);
         } else {
+            // If we don't get a hit, do nothing
             {}
         }
     }
+    // If we reach this point, the name could not be found in our JSON and an appropriate response is returned
     Err((Status::BadRequest, "Name not found".to_string()))
 }
 
 #[post("/recipes", format = "json", data = "<item>")]
-fn add_recipe(
-    json: &State<MutJsonState>, 
-    item: Json<Recipes>
-  ) -> Result<(), (Status, String)> {
+fn add_recipe(json: &State<MutJsonState>, item: Json<Recipes>) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
+
+    // Create a vector of recipe names
     let all_recipe_names = crate::add_to_vec(serde_json::from_str(&recipes).unwrap_or_default());
+
+    // Check if the recipe does not exist
     if !all_recipe_names.contains(&item.name) {
+        // Consume the json wrapper and return the item
         let new_recipe = item.into_inner();
+
+        // Add the new recipe
         all_recipes.push(new_recipe);
+
+        // Construct a json with "recipes" as the key
         let result = serde_json::json!({ "recipes": all_recipes });
+
+        // Dereference and lock the thread for writing
         *json.write().unwrap() = result.clone();
+
+        // Open the json file
         let mut file = crate::open_file("data/data.json".to_string());
+
+        // Overwrite the file with our recipes
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
         Ok(())
@@ -145,11 +172,10 @@ fn add_recipe(
     }
 }
 
+// Much of the code is the same for `add_recipe` so please look there for code explanations
+// or check below for the explanation on code difference
 #[put("/recipes", format = "json", data = "<item>")]
-fn edit_recipe(
-    json: &State<MutJsonState>,
-    item: Json<Recipes>,
-) -> Result<(), (Status, String)> {
+fn edit_recipe(json: &State<MutJsonState>, item: Json<Recipes>) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -161,6 +187,8 @@ fn edit_recipe(
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
+
+        // Dereference and lock the thread for writing
         *json.write().unwrap() = result.clone();
         let mut file = crate::open_file("data/data.json".to_string());
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
