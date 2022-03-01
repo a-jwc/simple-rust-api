@@ -29,15 +29,15 @@ struct JsonState {
     json: Value,
 }
 
-type JsonStatePointer = RwLock<Value>;
+type MutJsonState = RwLock<Value>;
 
 impl JsonState {
-    fn new(json: Value) -> JsonStatePointer {
+    fn new(json: Value) -> MutJsonState {
         RwLock::new(json)
     }
 }
 
-fn get_recipes_json(json: &State<JsonStatePointer>) -> Result<String, (Status, String)> {
+fn get_recipes_json(json: &State<MutJsonState>) -> Result<String, (Status, String)> {
     let json = json.read().unwrap();
     let recipes = match json.get("recipes") {
         Some(r) => r.to_string(),
@@ -51,7 +51,7 @@ fn get_recipes_json(json: &State<JsonStatePointer>) -> Result<String, (Status, S
     Ok(recipes)
 }
 
-fn read_file(file_path: String) -> File {
+fn open_file(file_path: String) -> File {
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -76,13 +76,13 @@ fn index() -> &'static str {
 }
 
 #[get("/allRecipes")]
-fn all_recipes(json: &State<JsonStatePointer>) -> String {
+fn all_recipes(json: &State<MutJsonState>) -> String {
     let json = json.read().unwrap();
     json.to_string()
 }
 
 #[get("/recipes")]
-fn get_recipe_names(json: &State<JsonStatePointer>) -> Result<Value, (Status, String)> {
+fn get_recipe_names(json: &State<MutJsonState>) -> Result<Value, (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
@@ -97,7 +97,7 @@ fn get_recipe_names(json: &State<JsonStatePointer>) -> Result<Value, (Status, St
 
 #[get("/recipes/details/<name>")]
 fn get_recipe_details(
-    json: &State<JsonStatePointer>,
+    json: &State<MutJsonState>,
     name: &str,
 ) -> Result<Value, (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
@@ -121,19 +121,22 @@ fn get_recipe_details(
 }
 
 #[post("/recipes", format = "json", data = "<item>")]
-fn add_recipe(json: &State<JsonStatePointer>, item: Json<Recipes>) -> Result<(), (Status, String)> {
+fn add_recipe(
+    json: &State<MutJsonState>, 
+    item: Json<Recipes>
+  ) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
         Ok(r) => r,
         Err(e) => return Err(e),
     };
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     let all_recipe_names = crate::add_to_vec(serde_json::from_str(&recipes).unwrap_or_default());
-    if !all_recipe_names.contains(&&item.name) {
+    if !all_recipe_names.contains(&item.name) {
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
         *json.write().unwrap() = result.clone();
-        let mut file = crate::read_file("data/data.json".to_string());
+        let mut file = crate::open_file("data/data.json".to_string());
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
         Ok(())
@@ -144,7 +147,7 @@ fn add_recipe(json: &State<JsonStatePointer>, item: Json<Recipes>) -> Result<(),
 
 #[put("/recipes", format = "json", data = "<item>")]
 fn edit_recipe(
-    json: &State<JsonStatePointer>,
+    json: &State<MutJsonState>,
     item: Json<Recipes>,
 ) -> Result<(), (Status, String)> {
     let recipes = match crate::get_recipes_json(json) {
@@ -153,13 +156,13 @@ fn edit_recipe(
     };
     let mut all_recipes: Vec<Recipes> = serde_json::from_str(&recipes).unwrap_or_default();
     let all_recipe_names = crate::add_to_vec(serde_json::from_str(&recipes).unwrap_or_default());
-    if all_recipe_names.contains(&&item.name) {
+    if all_recipe_names.contains(&item.name) {
         all_recipes.retain(|x| x.name != item.name);
         let new_recipe = item.into_inner();
         all_recipes.push(new_recipe);
         let result = serde_json::json!({ "recipes": all_recipes });
         *json.write().unwrap() = result.clone();
-        let mut file = crate::read_file("data/data.json".to_string());
+        let mut file = crate::open_file("data/data.json".to_string());
         serde_json::to_writer_pretty(&mut file, &result).unwrap_or_default();
         file.flush().unwrap_or_default();
         Ok(())
@@ -170,7 +173,7 @@ fn edit_recipe(
 
 #[launch]
 fn rocket() -> _ {
-    let rdr = crate::read_file("data/data.json".to_string());
+    let rdr = crate::open_file("data/data.json".to_string());
     let json: Value =
         serde_json::from_reader(rdr).expect("Failed to convert rdr into serde_json::Value");
     rocket::build()
